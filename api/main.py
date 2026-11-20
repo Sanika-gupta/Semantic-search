@@ -198,7 +198,7 @@ async def liveness():
 
 
 @app.get("/health/ready", tags=["Health"])
-async def readiness():
+def readiness():
     """Readiness probe - can the app handle requests?"""
     search_service = app_state.get('search_service')
     mongo_client = app_state.get('mongo_client')
@@ -234,7 +234,7 @@ async def readiness():
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
-async def health_check():
+def health_check():
     """Health check endpoint (legacy, use /health/ready)."""
     search_service = app_state.get('search_service')
     mongo_client = app_state.get('mongo_client')
@@ -257,7 +257,7 @@ async def health_check():
 
 
 @app.get("/cache/stats", response_model=CacheStats, tags=["Cache"])
-async def cache_stats():
+def cache_stats():
     """
     Get cache statistics.
 
@@ -276,7 +276,7 @@ async def cache_stats():
 
 
 @app.get("/trends", response_model=TrendsResponse, tags=["Trends"])
-async def get_trends(
+def get_trends(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     interval: str = "month",
@@ -332,7 +332,7 @@ async def get_trends(
 
 
 @app.get("/trends/categories", response_model=List[CategoryBreakdown], tags=["Trends"])
-async def get_category_breakdown(
+def get_category_breakdown(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None
 ):
@@ -362,7 +362,7 @@ async def get_category_breakdown(
 
 
 @app.get("/trends/keywords", response_model=List[KeywordTrend], tags=["Trends"])
-async def get_top_keywords(
+def get_top_keywords(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     limit: int = 10
@@ -394,7 +394,7 @@ async def get_top_keywords(
 
 
 @app.get("/trends/growth", response_model=GrowthStats, tags=["Trends"])
-async def get_growth_stats(
+def get_growth_stats(
     topic: Optional[str] = None,
     category: Optional[str] = None
 ):
@@ -417,7 +417,7 @@ async def get_growth_stats(
 
 
 @app.post("/search", response_model=SearchResponse, tags=["Search"])
-async def search(query: SearchQuery):
+def search(query: SearchQuery):
     """
     Semantic search endpoint.
 

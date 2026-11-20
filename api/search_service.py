@@ -80,10 +80,11 @@ class SearchService:
         # Cache miss - perform actual search
         paper_ids, scores = self.vector_store.search(query_embedding, k=k)
 
-        # Fetch full paper details from MongoDB
+        # Fetch full paper details from MongoDB in one query ($in), not one per result
+        papers_by_id = self.mongo_client.get_papers_by_arxiv_ids(paper_ids)
         results = []
         for paper_id, score in zip(paper_ids, scores):
-            paper = self.mongo_client.get_paper_by_arxiv_id(paper_id)
+            paper = papers_by_id.get(paper_id)
             if paper:
                 paper['similarity_score'] = float(score)
                 # Remove MongoDB _id field

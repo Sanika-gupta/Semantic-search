@@ -2,7 +2,7 @@
 
 Search arXiv papers by **meaning**, not keywords. Ask *"robot manipulation with language grounding"* and get the papers closest in meaning, even when they never use those exact words. The engine also shows how research topics trend over time.
 
-![Python](https://img.shields.io/badge/python-3.12-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688) ![FAISS](https://img.shields.io/badge/FAISS-1.9-orange) ![Redis](https://img.shields.io/badge/Redis-cache%20%2B%20rate%20limit-red)
+![Python](https://img.shields.io/badge/python-3.13-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688) ![FAISS](https://img.shields.io/badge/FAISS-1.9%2B-orange) ![Redis](https://img.shields.io/badge/Redis-cache%20%2B%20rate%20limit-red)
 
 > **Status:** working prototype over 100 VLA / VLM / humanoid-robotics papers.
 
@@ -40,17 +40,29 @@ flowchart LR
 
 ## Results
 
-Measured locally on 10 Aug 2026 against MongoDB Atlas and Redis Cloud (free tiers). Details are in [`benchmark_results/LOAD_TEST_RESULTS.md`](benchmark_results/LOAD_TEST_RESULTS.md).
+### Concurrency fix: 4.4x throughput on `/search`
+
+The `/search` and trend endpoints were `async def` but called blocking code (the sentence-transformer encode and synchronous pymongo). That froze the event loop, so requests ran one at a time. The fix runs that work in FastAPI's threadpool, moves the rate limiter's Redis call off the loop, and fetches all top-k papers in one MongoDB `$in` query instead of k separate lookups.
+
+Measured on 20 Nov 2026 with Locust: 20 users for 60 s, cache off, rate limit raised so it never triggered. The local API used MongoDB Atlas (free tier). Raw data is in `benchmark_results/before_stats.csv` and `after_stats.csv`.
+
+| `POST /search` | Before | After |
+|---|---|---|
+| Throughput | 6.4 req/s | **28.3 req/s** (4.4x) |
+| Median latency | 1,500 ms | **56 ms** |
+| p95 latency | 3,100 ms | **80 ms** |
+| p99 latency | 6,500 ms | 2,100 ms |
+| Failures | 0 | 0 |
+
+### Other measurements
 
 | Metric | Value |
 |---|---|
 | FAISS search time (100 vectors) | ~1 ms |
-| Cache miss, then cache hit, same query | 1,480 ms, then 353 ms (**76% faster**) |
-| Throughput under load (10 to 50 users) | ~1.1 to 1.2 req/s |
-| Median `/search` latency, 10 / 20 / 50 users | 3.9 s / 8.1 s / 10 s |
-| Rate-limiter tests | 18 passed |
+| Semantic cache: miss, then hit on the same query | 1,480 ms, then 353 ms (76% faster) |
+| Rate-limiter unit tests | 18 passed |
 
-**What these numbers tell us:** FAISS itself is fast. The end-to-end latency comes mostly from embedding the query and from network round trips to the cloud database and cache. Throughput stays flat as users increase, which points to blocking work on the async event loop.
+Earlier load tests (10 Aug 2026, with the 10 req/min rate limiter on) are in [`benchmark_results/LOAD_TEST_RESULTS.md`](benchmark_results/LOAD_TEST_RESULTS.md).
 
 ## API
 
@@ -113,5 +125,4 @@ docs/           design spec and build notes
 
 - Small corpus: 100 papers.
 - No retrieval-quality metrics yet (precision, recall, nDCG).
-- Throughput is limited by blocking calls inside async endpoints.
 - The cache's similarity lookup is a linear scan.

@@ -91,6 +91,13 @@ class MongoDBClient:
         """Retrieve a single paper by its arXiv ID."""
         return self.papers_collection.find_one({'arxiv_id': arxiv_id})
 
+    def get_papers_by_arxiv_ids(self, arxiv_ids: List[str]) -> Dict[str, Dict]:
+        """Retrieve many papers in one round trip, keyed by arXiv ID."""
+        if not arxiv_ids:
+            return {}
+        cursor = self.papers_collection.find({'arxiv_id': {'$in': list(arxiv_ids)}})
+        return {paper['arxiv_id']: paper for paper in cursor}
+
     def get_papers_by_category(self, category: str, limit: Optional[int] = None) -> List[Dict]:
         """Retrieve papers filtered by category."""
         cursor = self.papers_collection.find({'categories': category})

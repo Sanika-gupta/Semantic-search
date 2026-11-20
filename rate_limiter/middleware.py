@@ -11,6 +11,7 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
+from starlette.concurrency import run_in_threadpool
 
 from .token_bucket import TokenBucket
 
@@ -149,7 +150,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         client_id = self._get_client_identifier(request)
 
         # Attempt to consume token
-        allowed, info = self.bucket.consume(client_id)
+        # Redis EVAL is a blocking network call; keep it off the event loop.
+        allowed, info = await run_in_threadpool(self.bucket.consume, client_id)
 
         if allowed:
             # Request allowed - proceed
