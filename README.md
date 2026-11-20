@@ -1,331 +1,117 @@
-# VLA/Humanoid Research Semantic Search & Trend Engine
+# Semantic Search & Trend Engine for Research Papers
 
-A production-grade semantic search and trend-analysis API over VLA (Vision-Language-Action), VLM, and humanoid robotics research papers.
+Search arXiv papers by **meaning**, not keywords. Ask *"robot manipulation with language grounding"* and get the papers closest in meaning, even when they never use those exact words. The engine also shows how research topics trend over time.
 
-## Project Overview
+![Python](https://img.shields.io/badge/python-3.12-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688) ![FAISS](https://img.shields.io/badge/FAISS-1.9-orange) ![Redis](https://img.shields.io/badge/Redis-cache%20%2B%20rate%20limit-red)
 
-This project enables natural language queries over robotics research papers ("robot manipulation with language grounding") and provides semantically relevant results, clustered by sub-topic, with trend tracking over time.
+> **Status:** working prototype over 100 VLA / VLM / humanoid-robotics papers.
 
-## Tech Stack
+---
 
-- **Data Source**: arXiv API (cs.RO, cs.CV, cs.LG, cs.AI categories)
-- **Database**: MongoDB (metadata storage)
-- **Embeddings**: sentence-transformers
-- **Vector Store**: FAISS
-- **Backend**: FastAPI
-- **Caching**: Redis
-- **Frontend**: React + Recharts
-- **Load Testing**: Locust
+## Architecture
 
-## Project Structure
+```mermaid
+flowchart LR
+    A[arXiv API] -->|ingest_arxiv.py| B[(MongoDB<br/>paper metadata)]
+    B -->|build_index.py| C[sentence-transformers<br/>384-d embeddings]
+    C --> D[(FAISS index)]
 
-```
-vla-research-engine/
-├── config/              # Configuration and settings
-├── ingestion/           # Data ingestion pipeline (Phase 1)
-├── embeddings/          # Embedding generation and vector store (Phase 2)
-├── api/                 # FastAPI backend (Phase 2)
-├── tests/               # Test suites
-├── ingest_arxiv.py      # Phase 1: Ingest papers from arXiv
-├── build_index.py       # Phase 2: Build embeddings and FAISS index
-├── run_api.py           # Phase 2: Run API server
-├── test_search.py       # Phase 2: Test search functionality
-└── requirements.txt
+    U[Client / Web UI] --> M[FastAPI]
+    M --> RL[Token-bucket<br/>rate limiter]
+    RL --> SC{Semantic cache<br/>Redis}
+    SC -- hit --> U
+    SC -- miss --> D
+    D -->|top-k IDs| B
+    B -->|paper details| U
 ```
 
-## Setup
+**Request flow for `/search`:** rate-limit check, then embed the query, then check the cache (exact match, then similarity). On a miss, search FAISS for the top-k IDs, fetch the paper details from MongoDB, store the result in the cache, and return it.
 
-### 1. Install Dependencies
+## How it works
+
+| Step | Component | What it does | Why this choice |
+|---|---|---|---|
+| 1 | **Ingestion** (`ingestion/`) | Pulls papers from the arXiv API into MongoDB, deduplicated by arXiv ID | MongoDB also powers the trend aggregations |
+| 2 | **Embeddings** (`embeddings/`) | `all-MiniLM-L6-v2` turns each title and abstract into a 384-d vector | Runs locally on CPU, no API cost |
+| 3 | **Vector search** (FAISS `IndexFlatIP`) | Finds the top-k papers by cosine similarity | Exact search takes ~1 ms at this size, so approximate indexes (IVF/HNSW) aren't needed yet |
+| 4 | **Rate limiter** (`rate_limiter/`) | Token bucket: burst of 20, refills at 10 per minute, returns 429 with `Retry-After` | Built from scratch. One atomic Redis Lua script, so concurrent requests can't spend the same token. Fails open if Redis is down |
+| 5 | **Semantic cache** (`cache/`) | Exact-match hash first, then cosine similarity of 0.95 or more against recent query embeddings | Plain string caching misses reworded queries. Trade-off: the similarity lookup is a linear scan |
+| 6 | **Trends** (`api/trends.py`) | Paper counts over time, category and keyword breakdowns, growth rate | Answers "what is the field working on?" |
+
+## Results
+
+Measured locally on 10 Aug 2026 against MongoDB Atlas and Redis Cloud (free tiers). Details are in [`benchmark_results/LOAD_TEST_RESULTS.md`](benchmark_results/LOAD_TEST_RESULTS.md).
+
+| Metric | Value |
+|---|---|
+| FAISS search time (100 vectors) | ~1 ms |
+| Cache miss, then cache hit, same query | 1,480 ms, then 353 ms (**76% faster**) |
+| Throughput under load (10 to 50 users) | ~1.1 to 1.2 req/s |
+| Median `/search` latency, 10 / 20 / 50 users | 3.9 s / 8.1 s / 10 s |
+| Rate-limiter tests | 18 passed |
+
+**What these numbers tell us:** FAISS itself is fast. The end-to-end latency comes mostly from embedding the query and from network round trips to the cloud database and cache. Throughput stays flat as users increase, which points to blocking work on the async event loop.
+
+## API
+
+| Method | Endpoint | What it does |
+|---|---|---|
+| `POST` | `/search` | Semantic search. Body: `{"query": "...", "k": 10}` (k from 1 to 100) |
+| `GET` | `/trends` | Paper counts over time (`interval=day\|week\|month`, date filters) |
+| `GET` | `/trends/categories` | Paper count per arXiv category |
+| `GET` | `/trends/keywords` | Top keywords |
+| `GET` | `/trends/growth` | Growth rate for a topic or category |
+| `GET` | `/cache/stats` | Cache hits, misses and similarity hits |
+| `GET` | `/health`, `/health/live`, `/health/ready` | Health probes |
+
+Interactive docs are at `http://localhost:8000/docs` once the server is running.
 
 ```bash
-pip install -r requirements.txt
-```
-
-### 2. Set Up MongoDB
-
-**Option A: Local MongoDB**
-- Install MongoDB locally: https://www.mongodb.com/try/download/community
-- Start MongoDB service: `mongod` (default port 27017)
-
-**Option B: MongoDB Atlas (Recommended for simplicity)**
-- Create free account at https://www.mongodb.com/cloud/atlas
-- Create a cluster
-- Get connection string and update `.env`
-
-### 3. Configure Environment
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your MongoDB connection string:
-```
-MONGODB_URI=mongodb://localhost:27017/
-# Or for MongoDB Atlas:
-# MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/
-MONGODB_DB_NAME=vla_research
-```
-
-## Phase 1: arXiv Ingestion Pipeline
-
-### Test Your Setup
-
-Before running the full ingestion, test your connections:
-
-```bash
-python test_connection.py
-```
-
-This will verify:
-- MongoDB connection
-- arXiv API connectivity
-
-### Run the Ingestion
-
-Fetch VLA/VLM/humanoid papers from arXiv and store in MongoDB:
-
-```bash
-python ingest_arxiv.py
-```
-
-### Options
-
-```bash
-# Fetch specific number of papers
-python ingest_arxiv.py --max-results 1000
-
-# Dry run (fetch but don't insert)
-python ingest_arxiv.py --dry-run
-
-# Pagination (start from index 100)
-python ingest_arxiv.py --start 100 --max-results 500
-```
-
-### What It Does
-
-1. Queries arXiv API with filters:
-   - **Categories**: cs.RO, cs.CV, cs.LG, cs.AI
-   - **Keywords**: VLA, VLM, humanoid, vision language action, vision language model, embodied AI, robot learning
-
-2. Extracts and stores:
-   - Title
-   - Abstract
-   - Authors
-   - Publication date
-   - arXiv ID
-   - Categories
-   - PDF URL
-
-3. MongoDB schema:
-   - Indexes on `arxiv_id` (unique), `published_date`, `categories`
-   - Full-text search index on `title` and `abstract`
-
-### Expected Results
-
-- Target: 1,000-3,000 papers
-- Duplicate detection via arXiv ID
-- Papers sorted by submission date (most recent first)
-
-## Phase 2: Embeddings + Semantic Search
-
-### Build the Index
-
-Generate embeddings and create FAISS index:
-
-```bash
-python build_index.py
-```
-
-This will:
-1. Load all papers from MongoDB
-2. Generate embeddings using sentence-transformers (all-MiniLM-L6-v2)
-3. Create FAISS index for similarity search
-4. Save index to `data/indexes/`
-5. Run test queries to verify functionality
-
-Options:
-```bash
-# Use better quality model (slower, 768 dims)
-python build_index.py --model all-mpnet-base-v2
-
-# Custom batch size
-python build_index.py --batch-size 64
-```
-
-### Test the System
-
-Run the comprehensive test suite:
-
-```bash
-python tests/test_phase2.py
-```
-
-This tests:
-- MongoDB connection
-- Embedding generation
-- Vector store creation and search
-- Index persistence (save/load)
-
-### Run the API Server
-
-Start the FastAPI server:
-
-```bash
-python run_api.py
-```
-
-The server will start at `http://localhost:8000`
-
-- **API Docs**: http://localhost:8000/docs
-- **Health Check**: http://localhost:8000/health
-
-Options:
-```bash
-# Run with auto-reload for development
-python run_api.py --reload
-
-# Custom port
-python run_api.py --port 8080
-```
-
-### Test Search
-
-Using the CLI tool:
-
-```bash
-# Single query
-python test_search.py robot manipulation with vision language models
-
-# Get more results
-python test_search.py -k 10 humanoid locomotion learning
-
-# Check API health
-python test_search.py --health
-
-# Interactive mode
-python test_search.py
-```
-
-Using curl:
-
-```bash
-curl -X POST "http://localhost:8000/search" \
+curl -X POST http://localhost:8000/search \
   -H "Content-Type: application/json" \
-  -d '{"query": "robot manipulation with vision language models", "k": 5}'
+  -d '{"query": "diffusion policy for robot learning", "k": 5}'
 ```
 
-### Example Queries
+## Quick start
 
-Try these natural language queries:
-
-- "robot manipulation with vision language models"
-- "humanoid locomotion and balance control"
-- "diffusion policy for robot learning"
-- "world models for robotic planning"
-- "imitation learning from human demonstrations"
-- "sim-to-real transfer for robot control"
-
-## Development Roadmap
-
-- [x] **Phase 1**: arXiv ingestion pipeline (3-4 hrs)
-- [x] **Phase 2**: Embeddings + semantic search (3-4 hrs)
-- [ ] **Phase 3**: Custom rate limiter (3-4 hrs)
-- [ ] **Phase 4**: Semantic-aware caching (2-3 hrs)
-- [ ] **Phase 5**: Trend analysis (2-3 hrs)
-- [ ] **Phase 6**: Clustering (stretch, 2-3 hrs)
-- [ ] **Phase 7**: Local orchestration + load testing (2-3 hrs)
-
-### Inspect Your Data
-
-After ingestion, explore the data:
+**Prerequisites:** Python 3.10 or newer, a MongoDB instance (local or the [Atlas](https://www.mongodb.com/cloud/atlas) free tier) and Redis (local or Redis Cloud). Redis is optional: without it, the rate limiting and caching are switched off.
 
 ```bash
-# Show summary statistics and recent papers
-python inspect_data.py
-
-# Show top 10 recent papers
-python inspect_data.py --recent 10
-
-# Search for papers with keyword
-python inspect_data.py --search "manipulation"
-
-# Summary statistics only
-python inspect_data.py --summary
-```
-
-## Complete Workflow
-
-### First Time Setup
-
-See **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for detailed instructions.
-
-Quick version:
-```bash
-# 1. Install dependencies
+git clone https://github.com/Sanika-gupta/Semantic-search.git
+cd Semantic-search
 pip install -r requirements.txt
 
-# 2. Set up MongoDB (MongoDB Atlas free tier recommended)
-# 3. Configure .env
-cp .env.example .env
-# Edit .env with your MongoDB connection string
+cp .env.example .env        # then fill in MONGODB_URI and REDIS_URI
+python test_connection.py   # checks MongoDB + arXiv connectivity
 
-# 4. Test connections
-python test_connection.py
-
-# 5. Run Phase 1: Ingest papers
-python ingest_arxiv.py --max-results 100
-
-# 6. Run Phase 2: Build search index
-python build_index.py
-
-# 7. Verify everything
-python verify_setup.py
-
-# 8. Start API
-python run_api.py
-
-# 9. Test search (in new terminal)
-python test_search.py robot manipulation
+python ingest_arxiv.py      # 1. fetch papers into MongoDB
+python build_index.py       # 2. embed papers + build the FAISS index
+python run_api.py           # 3. API at http://localhost:8000
+python run_frontend.py      # 4. (optional) web UI at http://localhost:3000
 ```
 
-## Documentation
+**Load test:**
 
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Complete setup instructions
-- **[QUICKSTART.md](QUICKSTART.md)** - Get running in 5 minutes
-- **[PHASE2_COMPLETE.md](PHASE2_COMPLETE.md)** - Phase 2 technical details
-- **[PROJECT_STATUS.md](PROJECT_STATUS.md)** - Current status and roadmap
-- **[spec.md](spec.md)** - Original project specification
+```bash
+locust -f locustfile.py --headless -u 20 -r 5 -t 60s --host http://localhost:8000
+```
 
-## Current Status
+## Project structure
 
-- ✅ **Phase 1**: arXiv ingestion pipeline
-- ✅ **Phase 2**: Embeddings + semantic search API
-- ⬜ **Phase 3**: Custom rate limiter
-- ⬜ **Phase 4**: Semantic caching
-- ⬜ **Phase 5**: Trend analysis
-- ⬜ **Phase 6**: Clustering (stretch)
-- ⬜ **Phase 7**: Load testing
+```
+ingestion/      arXiv client + MongoDB client
+embeddings/     sentence-transformer wrapper + FAISS vector store
+api/            FastAPI app, search service, trend analytics
+cache/          Redis wrapper + semantic cache
+rate_limiter/   token bucket (Redis + Lua) + FastAPI middleware
+frontend/       single-page search UI
+tests/          rate limiter and search tests
+docs/           design spec and build notes
+```
 
-See [PROJECT_STATUS.md](PROJECT_STATUS.md) for details.
+## Limitations (honest list)
 
-## Performance
-
-Current metrics (Phase 2):
-- **Search latency**: ~15-30ms per query
-- **Embedding generation**: ~30-60s for 1000 papers
-- **Index size**: ~1.5MB per 1000 papers
-- **Memory**: ~100MB (model) + ~1.5MB per 1000 papers (index)
-
-## Tech Highlights
-
-This project demonstrates:
-- ✅ **Real ML**: Semantic embeddings, vector similarity search
-- ✅ **Systems Engineering**: FastAPI backend, MongoDB indexing, FAISS vector store
-- ✅ **End-to-End Pipeline**: Data ingestion → processing → search → API
-- ⏳ **Rate Limiting**: Token bucket (Phase 3)
-- ⏳ **Caching**: Similarity-aware semantic cache (Phase 4)
-- ⏳ **Metrics**: Load testing with real numbers (Phase 7)
-
-## License
-
-MIT
+- Small corpus: 100 papers.
+- No retrieval-quality metrics yet (precision, recall, nDCG).
+- Throughput is limited by blocking calls inside async endpoints.
+- The cache's similarity lookup is a linear scan.
