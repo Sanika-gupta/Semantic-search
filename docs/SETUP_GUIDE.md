@@ -60,7 +60,7 @@ You have two options:
 
 5. **Update .env**:
    ```
-   MONGODB_URI=mongodb+srv://vla_user:YOUR_PASSWORD@cluster.mongodb.net/
+   MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/
    MONGODB_DB_NAME=vla_research
    ```
 
