@@ -1,0 +1,7 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+GET,/cache/stats,HTTPError('429 Client Error: Too Many Requests for url: /cache/stats'),1,2026-08-10T12:37:15Z,2026-08-10T12:37:15Z
+GET,/trends/categories,HTTPError('429 Client Error: Too Many Requests for url: /trends/categories'),3,2026-08-10T12:37:34Z,2026-08-10T12:37:57Z
+GET,/trends,HTTPError('429 Client Error: Too Many Requests for url: /trends'),4,2026-08-10T12:37:17Z,2026-08-10T12:37:42Z
+POST,/search,CatchResponseError('Status 0'),1,2026-08-10T12:37:45Z,2026-08-10T12:37:45Z
+GET,/trends/keywords?limit=10,HTTPError('429 Client Error: Too Many Requests for url: /trends/keywords?limit=10'),2,2026-08-10T12:37:08Z,2026-08-10T12:37:26Z
+POST,/search (repeat),HTTPError('429 Client Error: Too Many Requests for url: /search (repeat)'),8,2026-08-10T12:37:12Z,2026-08-10T12:37:45Z

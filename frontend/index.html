@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VLA Research Engine</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 0;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .search-section {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px 20px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            padding: 12px 30px;
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .stat-item {
+            padding: 8px 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .stat-item strong {
+            color: #667eea;
+        }
+
+        .results-section {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .result-item {
+            padding: 20px;
+            margin-bottom: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .result-item:hover {
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+        }
+
+        .result-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+
+        .result-meta {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 12px;
+        }
+
+        .result-meta span {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            background: #e8f0fe;
+            color: #1967d2;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .similarity-score {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .result-abstract {
+            color: #555;
+            line-height: 1.7;
+            margin-top: 10px;
+        }
+
+        .result-authors {
+            font-size: 14px;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+            font-size: 18px;
+        }
+
+        .error {
+            padding: 20px;
+            background: #ffebee;
+            color: #c62828;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state svg {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        .trends-section {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .keywords-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+        }
+
+        .keyword-item {
+            padding: 12px 15px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 6px;
+            text-align: center;
+            transition: transform 0.2s;
+        }
+
+        .keyword-item:hover {
+            transform: translateY(-2px);
+        }
+
+        .keyword-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .keyword-count {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .chart-container {
+            margin-top: 20px;
+            overflow-x: auto;
+        }
+
+        .bar-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+            height: 200px;
+            padding: 10px;
+        }
+
+        .bar {
+            flex: 1;
+            min-width: 40px;
+            background: linear-gradient(to top, #667eea 0%, #764ba2 100%);
+            border-radius: 4px 4px 0 0;
+            position: relative;
+            transition: transform 0.3s;
+        }
+
+        .bar:hover {
+            transform: scaleY(1.05);
+        }
+
+        .bar-label {
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            color: #666;
+            white-space: nowrap;
+        }
+
+        .bar-value {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        footer {
+            text-align: center;
+            padding: 30px 20px;
+            color: #999;
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+
+            .search-box {
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>🤖 VLA Research Engine</h1>
+            <p class="subtitle">Semantic search over Vision-Language-Action & robotics research papers</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Search Section -->
+        <div class="search-section">
+            <div class="search-box">
+                <input
+                    type="text"
+                    id="searchInput"
+                    placeholder="Search for papers (e.g., 'robot manipulation with vision language models')..."
+                    value="robot manipulation with vision language models"
+                />
+                <button id="searchBtn" onclick="searchPapers()">Search</button>
+            </div>
+            <div class="stats" id="searchStats"></div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-section">
+            <h2 class="section-title">Search Results</h2>
+            <div id="results">
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                    </svg>
+                    <p>Enter a search query to find relevant research papers</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trends Section -->
+        <div class="trends-section">
+            <h2 class="section-title">Top Research Keywords</h2>
+            <div class="keywords-grid" id="keywords"></div>
+        </div>
+
+        <!-- Category Chart -->
+        <div class="trends-section">
+            <h2 class="section-title">Papers by arXiv Category</h2>
+            <div class="chart-container">
+                <div class="bar-chart" id="categoryChart"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>VLA Research Engine • Semantic Search • Built with FastAPI, FAISS, MongoDB, Redis</p>
+        <p style="margin-top: 10px; font-size: 12px;">
+            <a href="http://localhost:8000/docs" target="_blank" style="color: #667eea; text-decoration: none;">API Documentation</a>
+        </p>
+    </footer>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+
+        // Load initial data
+        window.addEventListener('DOMContentLoaded', () => {
+            loadKeywords();
+            loadCategories();
+
+            // Allow Enter key to search
+            document.getElementById('searchInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    searchPapers();
+                }
+            });
+        });
+
+        async function searchPapers() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) return;
+
+            const resultsDiv = document.getElementById('results');
+            const statsDiv = document.getElementById('searchStats');
+            const searchBtn = document.getElementById('searchBtn');
+
+            // Show loading
+            resultsDiv.innerHTML = '<div class="loading">🔍 Searching...</div>';
+            searchBtn.disabled = true;
+            statsDiv.innerHTML = '';
+
+            try {
+                const startTime = performance.now();
+                const response = await fetch(`${API_BASE}/search`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query, k: 5 })
+                });
+
+                const endTime = performance.now();
+                const clientLatency = Math.round(endTime - startTime);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // Display stats
+                const cacheStatus = data.cache_hit ? '✓ Cache Hit' : '✗ Cache Miss';
+                const cacheColor = data.cache_hit ? '#2e7d32' : '#666';
+
+                statsDiv.innerHTML = `
+                    <div class="stat-item">
+                        <strong>${data.total_results}</strong> results
+                    </div>
+                    <div class="stat-item">
+                        Server: <strong>${Math.round(data.search_time_ms)}ms</strong>
+                    </div>
+                    <div class="stat-item">
+                        Total: <strong>${clientLatency}ms</strong>
+                    </div>
+                    <div class="stat-item" style="color: ${cacheColor}">
+                        ${cacheStatus}
+                    </div>
+                `;
+
+                // Display results
+                if (data.results.length === 0) {
+                    resultsDiv.innerHTML = '<div class="empty-state"><p>No results found</p></div>';
+                } else {
+                    resultsDiv.innerHTML = data.results.map(paper => `
+                        <div class="result-item">
+                            <div class="result-title">${escapeHtml(paper.title)}</div>
+                            <div class="result-meta">
+                                <span>
+                                    <span class="badge similarity-score">
+                                        ${(paper.similarity_score * 100).toFixed(1)}% match
+                                    </span>
+                                </span>
+                                <span>
+                                    ${paper.categories.map(cat =>
+                                        `<span class="badge">${cat}</span>`
+                                    ).join(' ')}
+                                </span>
+                                <span>📅 ${new Date(paper.published_date).toLocaleDateString()}</span>
+                            </div>
+                            <div class="result-authors">
+                                👤 ${paper.authors.slice(0, 3).join(', ')}${paper.authors.length > 3 ? ` +${paper.authors.length - 3} more` : ''}
+                            </div>
+                            <div class="result-abstract">
+                                ${escapeHtml(paper.abstract.substring(0, 300))}${paper.abstract.length > 300 ? '...' : ''}
+                            </div>
+                            ${paper.pdf_url ? `
+                                <div style="margin-top: 10px;">
+                                    <a href="${paper.pdf_url}" target="_blank" style="color: #667eea; text-decoration: none; font-size: 14px;">
+                                        📄 View PDF
+                                    </a>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `).join('');
+                }
+
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error">
+                        <strong>Error:</strong> ${error.message}<br>
+                        <small>Make sure the API server is running at ${API_BASE}</small>
+                    </div>
+                `;
+            } finally {
+                searchBtn.disabled = false;
+            }
+        }
+
+        async function loadKeywords() {
+            try {
+                const response = await fetch(`${API_BASE}/trends/keywords?limit=12`);
+                const keywords = await response.json();
+
+                document.getElementById('keywords').innerHTML = keywords.map(kw => `
+                    <div class="keyword-item" onclick="searchKeyword('${escapeHtml(kw.keyword)}')">
+                        <div class="keyword-name">${escapeHtml(kw.keyword)}</div>
+                        <div class="keyword-count">${kw.count} papers</div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading keywords:', error);
+            }
+        }
+
+        async function loadCategories() {
+            try {
+                const response = await fetch(`${API_BASE}/trends/categories`);
+                const categories = await response.json();
+
+                const maxCount = Math.max(...categories.map(c => c.count));
+
+                document.getElementById('categoryChart').innerHTML = categories
+                    .slice(0, 8)
+                    .map(cat => {
+                        const height = (cat.count / maxCount) * 100;
+                        return `
+                            <div class="bar" style="height: ${height}%">
+                                <div class="bar-value">${cat.count}</div>
+                                <div class="bar-label">${cat.category}</div>
+                            </div>
+                        `;
+                    }).join('');
+            } catch (error) {
+                console.error('Error loading categories:', error);
+            }
+        }
+
+        function searchKeyword(keyword) {
+            document.getElementById('searchInput').value = keyword;
+            searchPapers();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
